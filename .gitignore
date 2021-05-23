@@ -2,6 +2,7 @@
 /target
 /.cargo/*.toml
 /Cargo.lock
+*.rmeta
 
 # IDE
 /.idea
@@ -12,3 +13,7 @@
 .DS_Store
 .trashes
 *.db
+
+# Release process
+autorel
+autorel.tar.gz

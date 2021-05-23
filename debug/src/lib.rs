@@ -4,12 +4,7 @@
 
 //! Rendering of Heron's collision shapes for debugging purposes
 
-use bevy_app::{AppBuilder, Plugin};
-use bevy_asset::prelude::*;
-use bevy_ecs::prelude::*;
-use bevy_render::prelude::*;
-use bevy_sprite::prelude::*;
-use bevy_transform::prelude::*;
+use bevy::prelude::*;
 use fnv::FnvHashMap;
 
 #[cfg(feature = "2d")]
@@ -19,11 +14,8 @@ mod dim2;
 #[derive(Debug, Copy, Clone)]
 pub struct DebugPlugin(Color);
 
-#[derive(Debug, Clone)]
-enum DebugMaterial {
-    Color(Color),
-    Handle(Handle<ColorMaterial>),
-}
+#[derive(Debug, Copy, Clone)]
+struct DebugColor(Color);
 
 type DebugEntityMap = FnvHashMap<Entity, Entity>;
 
@@ -44,69 +36,63 @@ impl From<Color> for DebugPlugin {
 
 impl Default for DebugPlugin {
     fn default() -> Self {
-        let mut color = bevy_render::color::Color::BLUE;
-        color.set_a(0.2);
+        let mut color = bevy::render::color::Color::BLUE;
+        color.set_a(0.4);
         Self(color)
     }
 }
 
 impl Plugin for DebugPlugin {
     fn build(&self, app: &mut AppBuilder) {
-        app.add_resource(DebugMaterial::from(self.0))
-            .init_resource::<DebugEntityMap>()
-            .add_stage_before(
-                bevy_app::stage::POST_UPDATE,
-                "heron-debug",
-                SystemStage::serial(),
-            )
-            .add_startup_system(create_material.system());
-
         #[cfg(feature = "2d")]
-        {
-            app.add_plugin(bevy_prototype_lyon::plugin::ShapePlugin)
-                .add_system_to_stage("heron-debug", dim2::delete_debug_sprite.system())
-                .add_system_to_stage("heron-debug", dim2::replace_debug_sprite.system())
-                .add_system_to_stage("heron-debug", dim2::create_debug_sprites.system());
-        }
+        app.add_plugin(bevy_prototype_lyon::plugin::ShapePlugin);
 
-        app.add_system_to_stage("heron-debug", track_debug_entities.system())
-            .add_system_to_stage("heron-debug", scale_debug_entities.system());
+        app.insert_resource(DebugColor(self.0))
+            .init_resource::<DebugEntityMap>()
+            .stage(heron_core::stage::ROOT, |schedule: &mut Schedule| {
+                schedule.add_stage_after(heron_core::stage::UPDATE, "heron-debug", debug_stage())
+            });
     }
 }
 
-impl From<Color> for DebugMaterial {
+fn debug_stage() -> SystemStage {
+    let mut stage = SystemStage::single_threaded();
+
+    #[cfg(feature = "2d")]
+    {
+        stage
+            .add_system(dim2::delete_debug_sprite.system())
+            .add_system(dim2::replace_debug_sprite.system())
+            .add_system(dim2::create_debug_sprites.system());
+    }
+
+    stage
+        .add_system(track_debug_entities.system())
+        .add_system(scale_debug_entities.system());
+
+    stage
+}
+
+impl From<Color> for DebugColor {
     fn from(color: Color) -> Self {
-        Self::Color(color)
+        Self(color)
     }
 }
 
-impl DebugMaterial {
-    #[allow(unused)]
-    fn handle(&self) -> Option<&Handle<ColorMaterial>> {
-        match self {
-            DebugMaterial::Color(_) => None,
-            DebugMaterial::Handle(handle) => Some(handle),
-        }
-    }
-}
-
-fn create_material(
-    mut debug_mat: ResMut<'_, DebugMaterial>,
-    mut assets: ResMut<'_, Assets<ColorMaterial>>,
-) {
-    if let DebugMaterial::Color(color) = &*debug_mat {
-        *debug_mat = DebugMaterial::Handle(assets.add((*color).into()));
+impl From<DebugColor> for Color {
+    fn from(DebugColor(color): DebugColor) -> Self {
+        color
     }
 }
 
 fn track_debug_entities(
-    commands: &mut Commands,
+    mut commands: Commands<'_>,
     mut map: ResMut<'_, DebugEntityMap>,
     query: Query<'_, (Entity, &IsDebug), Without<Indexed>>,
 ) {
     for (debug_entity, IsDebug(parent_entity)) in query.iter() {
         map.insert(*parent_entity, debug_entity);
-        commands.insert_one(debug_entity, Indexed);
+        commands.entity(debug_entity).insert(Indexed);
     }
 }
 

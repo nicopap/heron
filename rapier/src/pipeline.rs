@@ -1,16 +1,31 @@
-use bevy_app::Events;
-use bevy_ecs::prelude::*;
-use bevy_math::Vec3;
+use bevy::app::Events;
+use bevy::ecs::prelude::*;
+use bevy::math::Vec3;
 use crossbeam::channel::Receiver;
 
-use heron_core::{CollisionEvent, Gravity};
+use heron_core::{CollisionEvent, Gravity, PhysicsTime};
 
 use crate::convert::IntoRapier;
-use crate::rapier::dynamics::{IntegrationParameters, JointSet, RigidBodySet};
+use crate::rapier::dynamics::{CCDSolver, IntegrationParameters, JointSet, RigidBodySet};
 use crate::rapier::geometry::{
     BroadPhase, ColliderHandle, ColliderSet, ContactEvent, IntersectionEvent, NarrowPhase,
 };
 use crate::rapier::pipeline::{ChannelEventCollector, PhysicsPipeline};
+
+#[derive(Copy, Clone)]
+pub(crate) struct PhysicsStepPerSecond(pub(crate) f32);
+
+pub(crate) fn update_integration_parameters(
+    steps_per_second: Option<Res<'_, PhysicsStepPerSecond>>,
+    physics_time: Res<'_, PhysicsTime>,
+    mut integration_parameters: ResMut<'_, IntegrationParameters>,
+) {
+    if let Some(steps_per_second) = steps_per_second {
+        if steps_per_second.is_changed() {
+            integration_parameters.dt = physics_time.scale() / steps_per_second.0;
+        }
+    }
+}
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn step(
@@ -22,6 +37,7 @@ pub(crate) fn step(
     mut bodies: ResMut<'_, RigidBodySet>,
     mut colliders: ResMut<'_, ColliderSet>,
     mut joints: ResMut<'_, JointSet>,
+    mut ccd_solver: ResMut<'_, CCDSolver>,
     event_manager: Local<'_, EventManager>,
     mut events: ResMut<'_, Events<CollisionEvent>>,
 ) {
@@ -34,8 +50,8 @@ pub(crate) fn step(
         &mut bodies,
         &mut colliders,
         &mut joints,
-        None,
-        None,
+        &mut ccd_solver,
+        &(),
         &event_manager.handler,
     );
 
@@ -172,7 +188,7 @@ mod tests {
 
         let mut events = Events::<CollisionEvent>::default();
         manager.fire_events(&context.colliders, &mut events);
-        let events: Vec<CollisionEvent> = events.get_reader().iter(&events).cloned().collect();
+        let events: Vec<CollisionEvent> = events.get_reader().iter(&events).copied().collect();
 
         assert_eq!(
             events,
@@ -191,7 +207,7 @@ mod tests {
 
         let mut events = Events::<CollisionEvent>::default();
         manager.fire_events(&context.colliders, &mut events);
-        let events: Vec<CollisionEvent> = events.get_reader().iter(&events).cloned().collect();
+        let events: Vec<CollisionEvent> = events.get_reader().iter(&events).copied().collect();
 
         assert_eq!(
             events,
@@ -214,7 +230,7 @@ mod tests {
 
         let mut events = Events::<CollisionEvent>::default();
         manager.fire_events(&context.colliders, &mut events);
-        let events: Vec<CollisionEvent> = events.get_reader().iter(&events).cloned().collect();
+        let events: Vec<CollisionEvent> = events.get_reader().iter(&events).copied().collect();
 
         assert_eq!(
             events,
@@ -237,7 +253,7 @@ mod tests {
 
         let mut events = Events::<CollisionEvent>::default();
         manager.fire_events(&context.colliders, &mut events);
-        let events: Vec<CollisionEvent> = events.get_reader().iter(&events).cloned().collect();
+        let events: Vec<CollisionEvent> = events.get_reader().iter(&events).copied().collect();
 
         assert_eq!(
             events,

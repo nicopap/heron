@@ -25,10 +25,10 @@ fn test_app() -> App {
 }
 
 #[test]
-fn restitution_can_be_defined_when_creating_body() {
+fn friction_can_be_defined_when_creating_body() {
     let mut app = test_app();
 
-    let restitution = 0.42;
+    let friction = 0.5;
     let entity = app
         .world
         .spawn()
@@ -37,7 +37,7 @@ fn restitution_can_be_defined_when_creating_body() {
             RigidBody::Dynamic,
             CollisionShape::Sphere { radius: 10.0 },
             PhysicMaterial {
-                restitution,
+                friction,
                 ..Default::default()
             },
         ))
@@ -48,11 +48,11 @@ fn restitution_can_be_defined_when_creating_body() {
     let colliders = app.world.get_resource::<ColliderSet>().unwrap();
     let collider = colliders.get(*app.world.get(entity).unwrap()).unwrap();
 
-    assert_eq!(restitution, collider.restitution)
+    assert_eq!(friction, collider.friction)
 }
 
 #[test]
-fn restitution_can_be_updated() {
+fn friction_can_be_updated() {
     let mut app = test_app();
 
     let entity = app
@@ -67,9 +67,9 @@ fn restitution_can_be_updated() {
 
     app.update();
 
-    let restitution = 2.0;
+    let friction = 0.1;
     app.world.entity_mut(entity).insert(PhysicMaterial {
-        restitution,
+        friction,
         ..Default::default()
     });
 
@@ -78,5 +78,5 @@ fn restitution_can_be_updated() {
     let colliders = app.world.get_resource::<ColliderSet>().unwrap();
     let collider = colliders.get(*app.world.get(entity).unwrap()).unwrap();
 
-    assert_eq!(restitution, collider.restitution)
+    assert_eq!(friction, collider.friction)
 }

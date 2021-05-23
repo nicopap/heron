@@ -5,12 +5,13 @@
 //! Provides the [`IntoBevy`](IntoBevy) and [`IntoRapier`](IntoRapier)
 //! with implementations for bevy and rapier types
 
-use bevy_math::prelude::*;
+use bevy::math::prelude::*;
 
 use heron_core::AxisAngle;
-use rapier::na::{Point2, Point3};
 
-use crate::nalgebra::{self, Quaternion, UnitComplex, UnitQuaternion, Vector2, Vector3};
+use crate::nalgebra::{
+    self, Point2, Point3, Quaternion, UnitComplex, UnitQuaternion, Vector2, Vector3,
+};
 use crate::rapier::math::{Isometry, Translation, Vector};
 
 pub trait IntoBevy<T> {
@@ -43,7 +44,7 @@ impl IntoBevy<Vec3> for Translation<f32> {
 
 impl IntoBevy<Quat> for UnitComplex<f32> {
     fn into_bevy(self) -> Quat {
-        Quat::from_axis_angle(Vec3::unit_z(), self.angle())
+        Quat::from_axis_angle(Vec3::Z, self.angle())
     }
 }
 
@@ -77,6 +78,54 @@ impl IntoRapier<Vector3<f32>> for Vec3 {
     }
 }
 
+impl IntoRapier<Point2<f32>> for Vec2 {
+    fn into_rapier(self) -> Point2<f32> {
+        Point2 {
+            coords: self.into_rapier(),
+        }
+    }
+}
+
+impl IntoRapier<Point2<f32>> for Vec3 {
+    fn into_rapier(self) -> Point2<f32> {
+        Point2 {
+            coords: self.into_rapier(),
+        }
+    }
+}
+
+impl IntoRapier<Point3<f32>> for Vec3 {
+    fn into_rapier(self) -> Point3<f32> {
+        Point3 {
+            coords: self.into_rapier(),
+        }
+    }
+}
+
+impl IntoRapier<Vec<Point2<f32>>> for &[Vec3] {
+    fn into_rapier(self) -> Vec<Point2<f32>> {
+        self.iter().copied().map(IntoRapier::into_rapier).collect()
+    }
+}
+
+impl IntoRapier<Vec<Point3<f32>>> for &[Vec3] {
+    fn into_rapier(self) -> Vec<Point3<f32>> {
+        self.iter().copied().map(IntoRapier::into_rapier).collect()
+    }
+}
+
+impl IntoBevy<Vec2> for Point2<f32> {
+    fn into_bevy(self) -> Vec2 {
+        Vec2::new(self.x, self.y)
+    }
+}
+
+impl IntoBevy<Vec<Vec2>> for &[Point2<f32>] {
+    fn into_bevy(self) -> Vec<Vec2> {
+        self.iter().copied().map(IntoBevy::into_bevy).collect()
+    }
+}
+
 impl IntoRapier<Translation<f32>> for Vec3 {
     fn into_rapier(self) -> Translation<f32> {
         <Vec3 as IntoRapier<Vector<f32>>>::into_rapier(self).into()
@@ -85,8 +134,8 @@ impl IntoRapier<Translation<f32>> for Vec3 {
 
 impl IntoRapier<UnitComplex<f32>> for Quat {
     fn into_rapier(self) -> UnitComplex<f32> {
-        let (Vec3 { z, .. }, angle) = self.to_axis_angle();
-        nalgebra::UnitComplex::new(if z > 0.0 { angle } else { -angle })
+        let (axis, angle) = self.to_axis_angle();
+        nalgebra::UnitComplex::new(if axis.z > 0.0 { angle } else { -angle })
     }
 }
 
@@ -118,18 +167,6 @@ impl IntoRapier<Vector3<f32>> for AxisAngle {
     }
 }
 
-impl IntoRapier<Point2<f32>> for Vec2 {
-    fn into_rapier(self) -> Point2<f32> {
-        Point2::<f32>::new(self.x, self.y)
-    }
-}
-
-impl IntoRapier<Point3<f32>> for Vec3 {
-    fn into_rapier(self) -> Point3<f32> {
-        Point3::<f32>::new(self.x, self.y, self.z)
-    }
-}
-
 impl IntoRapier<Vec<Point2<f32>>> for Vec<Vec2> {
     fn into_rapier(self) -> Vec<Point2<f32>> {
         self.iter().map(|v| v.into_rapier()).collect()
@@ -147,25 +184,26 @@ mod tests {
     #[cfg(feature = "3d")]
     use std::f32::consts::PI;
 
-    use bevy_math::{Quat, Vec3};
+    use bevy::math::{Quat, Vec3};
 
     use super::*;
 
     #[cfg(feature = "2d")]
     mod angle2d {
-        use super::*;
         use rstest::rstest;
+
+        use super::*;
 
         #[test]
         fn negative_axis_angle_to_rapier() {
-            let result: f32 = AxisAngle::new(Vec3::unit_z(), -1.0).into_rapier();
+            let result: f32 = AxisAngle::new(Vec3::Z, -1.0).into_rapier();
             assert_eq!(result, -1.0);
         }
 
         #[rstest(quat,
-            case(Quat::from_axis_angle(Vec3::unit_z(), 2.0)),
-            case(Quat::from_axis_angle(-Vec3::unit_z(), 2.0)),
-            case(Quat::from_axis_angle(Vec3::unit_z(), 0.0)),
+            case(Quat::from_axis_angle(Vec3::Z, 2.0)),
+            case(Quat::from_axis_angle(-Vec3::Z, 2.0)),
+            case(Quat::from_axis_angle(Vec3::Z, 0.0)),
         )]
         fn into_rapier_into_bevy_is_identity(quat: Quat) {
             let rapier: UnitComplex<f32> = quat.into_rapier();
@@ -184,7 +222,7 @@ mod tests {
         #[test]
         fn set_translation() {
             let translation = Vec3::new(1.0, 2.0, 3.0);
-            let result = (translation, Quat::identity()).into_rapier();
+            let result = (translation, Quat::IDENTITY).into_rapier();
             assert_eq!(translation.x, result.translation.x);
             assert_eq!(translation.y, result.translation.y);
 

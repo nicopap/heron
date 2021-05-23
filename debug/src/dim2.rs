@@ -1,96 +1,115 @@
-use bevy_asset::prelude::*;
-use bevy_ecs::prelude::*;
-use bevy_math::{Vec2, Vec3};
-use bevy_prototype_lyon::entity::ShapeBundle;
-use bevy_prototype_lyon::prelude::*;
-use bevy_sprite::prelude::*;
-use bevy_transform::prelude::*;
-
-use heron_core::Body;
-
-use super::*;
-use bevy_prototype_lyon::shapes::RectangleOrigin;
 use std::f32::consts::PI;
 
-pub(crate) fn create_debug_sprites(
-    commands: &mut Commands,
-    query: Query<'_, (Entity, &Body, &GlobalTransform), Without<HasDebug>>,
-    debug_mat: Res<'_, DebugMaterial>,
-) {
-    let material = debug_mat.handle().expect("Debug material wasn't loaded");
+use bevy::prelude::*;
+use bevy_prototype_lyon::entity::ShapeBundle;
+use bevy_prototype_lyon::prelude::*;
+use bevy_prototype_lyon::shapes::RectangleOrigin;
 
-    for (entity, body, transform) in query.iter() {
-        commands.set_current_entity(entity);
-        commands
-            .with_children(|builder| {
-                builder
-                    .spawn(create_shape(body, material.clone(), *transform))
-                    .with(IsDebug(entity));
-            })
-            .with(HasDebug);
+use heron_core::CollisionShape;
+use heron_rapier::convert::IntoBevy;
+use heron_rapier::rapier::geometry::{ColliderHandle, ColliderSet, Shape};
+
+use super::*;
+
+pub(crate) fn create_debug_sprites(
+    mut commands: Commands<'_>,
+    colliders: Res<'_, ColliderSet>,
+    query: Query<
+        '_,
+        (Entity, &CollisionShape, &ColliderHandle, &GlobalTransform),
+        Without<HasDebug>,
+    >,
+    debug_color: Res<'_, DebugColor>,
+) {
+    for (entity, body, handle, transform) in query.iter() {
+        if let Some(collider) = colliders.get(*handle) {
+            commands
+                .entity(entity)
+                .with_children(|builder| {
+                    builder
+                        .spawn_bundle(create_shape(
+                            body,
+                            collider.shape(),
+                            (*debug_color).into(),
+                            *transform,
+                        ))
+                        .insert(IsDebug(entity));
+                })
+                .insert(HasDebug);
+        }
     }
 }
 
 pub(crate) fn replace_debug_sprite(
-    commands: &mut Commands,
+    mut commands: Commands<'_>,
     mut map: ResMut<'_, DebugEntityMap>,
-    query: Query<'_, (Entity, &Body, &GlobalTransform), (With<HasDebug>, Mutated<Body>)>,
-    debug_mat: Res<'_, DebugMaterial>,
+    colliders: Res<'_, ColliderSet>,
+    debug_color: Res<'_, DebugColor>,
+    query: Query<
+        '_,
+        (Entity, &CollisionShape, &ColliderHandle, &GlobalTransform),
+        (With<HasDebug>, Changed<CollisionShape>),
+    >,
 ) {
-    let material = debug_mat.handle().expect("Debug material wasn't loaded");
-
-    for (parent_entity, body, transform) in query.iter() {
-        if let Some(debug_entity) = map.remove(&parent_entity) {
-            commands.despawn(debug_entity);
-            commands.set_current_entity(parent_entity);
-            commands.with_children(|builder| {
+    for (parent_entity, body, handle, transform) in query.iter() {
+        if let (Some(debug_entity), Some(collider)) =
+            (map.remove(&parent_entity), colliders.get(*handle))
+        {
+            commands.entity(debug_entity).despawn();
+            commands.entity(parent_entity).with_children(|builder| {
                 builder
-                    .spawn(create_shape(body, material.clone(), *transform))
-                    .with(IsDebug(parent_entity));
+                    .spawn_bundle(create_shape(
+                        body,
+                        collider.shape(),
+                        (*debug_color).into(),
+                        *transform,
+                    ))
+                    .insert(IsDebug(parent_entity));
             });
         }
     }
 }
 
 pub(crate) fn delete_debug_sprite(
-    commands: &mut Commands,
+    mut commands: Commands<'_>,
     mut map: ResMut<'_, DebugEntityMap>,
-    query: Query<'_, Entity, (With<HasDebug>, Without<Body>)>,
+    removed_bodies: RemovedComponents<'_, CollisionShape>,
 ) {
-    for parent_entity in query.removed::<Body>() {
+    for parent_entity in removed_bodies.iter() {
         if let Some(debug_entity) = map.remove(&parent_entity) {
-            commands.despawn(debug_entity);
+            commands.entity(debug_entity).despawn();
         }
     }
 }
 
 fn create_shape(
-    body: &Body,
-    material: Handle<ColorMaterial>,
+    body: &CollisionShape,
+    shape: &dyn Shape,
+    color: Color,
     transform: GlobalTransform,
 ) -> ShapeBundle {
-    base_builder(body).build(
-        material,
-        TessellationMode::Fill(FillOptions::default()),
+    base_builder(body, shape).build(
+        ShapeColors::new(color),
+        DrawMode::Fill(FillOptions::default()),
         Transform {
-            translation: Vec3::unit_z(),
+            translation: Vec3::Z,
             scale: transform.scale.recip(),
             ..Default::default()
         },
     )
 }
 
-fn base_builder(body: &Body) -> GeometryBuilder {
+fn base_builder(body: &CollisionShape, shape: &dyn Shape) -> GeometryBuilder {
     let mut builder = GeometryBuilder::new();
 
     match body {
-        Body::Sphere { radius } => {
+        CollisionShape::Sphere { radius } => {
             builder.add(&shapes::Circle {
                 radius: *radius,
-                center: Vec2::zero(),
+                center: Vec2::ZERO,
             });
         }
-        Body::Capsule {
+        CollisionShape::Capsule {
             half_segment,
             radius,
         } => {
@@ -114,12 +133,20 @@ fn base_builder(body: &Body) -> GeometryBuilder {
             path.close();
             builder.add(&path.build());
         }
-        Body::Cuboid { half_extends } => {
+        CollisionShape::Cuboid { half_extends } => {
             builder.add(&shapes::Rectangle {
                 origin: RectangleOrigin::Center,
                 width: 2.0 * half_extends.x,
                 height: 2.0 * half_extends.y,
             });
+        }
+        CollisionShape::ConvexHull { .. } => {
+            if let Some(polygon) = shape.as_convex_polygon() {
+                builder.add(&shapes::Polygon {
+                    points: polygon.points().into_bevy(),
+                    closed: true,
+                });
+            }
         }
         Body::TriMesh { positions, indices } => {
             let mut path = PathBuilder::new();

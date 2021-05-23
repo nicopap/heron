@@ -3,6 +3,8 @@
 [![License](https://img.shields.io/github/license/jcornaz/heron)](https://github.com/jcornaz/heron/blob/main/LICENSE)
 [![Crates.io](https://img.shields.io/crates/v/heron)](https://crates.io/crates/heron)
 [![Docs](https://docs.rs/heron/badge.svg)](https://docs.rs/heron)
+[![dependency status](https://deps.rs/repo/github/jcornaz/heron/status.svg)](https://deps.rs/repo/github/jcornaz/heron)
+[![Bevy tracking](https://img.shields.io/badge/Bevy%20tracking-released%20version-lightblue)](https://github.com/bevyengine/bevy/blob/main/docs/plugins_guidelines.md#main-branch-tracking)
 [![Build](https://img.shields.io/github/workflow/status/jcornaz/heron/Build)](https://github.com/jcornaz/heron/actions?query=workflow%3ABuild+branch%3Amain)
 [![Zenhub](https://img.shields.io/badge/workspace-zenhub-%236061be)](https://app.zenhub.com/workspaces/heron-600478067304b1000e27f4c4/board)
 
@@ -10,30 +12,36 @@ An ergonomic physics API for 2d and 3d [bevy] games. (powered by [rapier])
 
 ## How it looks like
 
-```rust
+```rust,no_run
+use bevy::prelude::*;
+use heron::prelude::*;
+
 fn main() {
   App::build()
     .add_plugins(DefaultPlugins)
     .add_plugin(PhysicsPlugin::default()) // Add the plugin
-    .add_resource(Gravity::from(Vec3::new(0.0, -9.81, 0.0))) // Optionally define gravity
+    .insert_resource(Gravity::from(Vec3::new(0.0, -9.81, 0.0))) // Optionally define gravity
     .add_startup_system(spawn.system())
     .run();
 }
 
-fn spawn(commands: &mut Commands) {
+fn spawn(mut commands: Commands) {
     commands
 
         // Spawn any bundle of your choice. Only make sure there is a `GlobalTransform`
-        .spawn(SpriteBundle::default())
+        .spawn_bundle(SpriteBundle::default())
 
-        // Make it a physics body, by attaching a collision shape
-        .with(Body::Sphere { radius: 10.0 })
-
-        // Optionally define a type (if absent, the body will be *dynamic*)
-        .with(BodyType::Static)
+        // Make it a rigid body
+        .insert(RigidBody::Dynamic)
         
-        // Optionally define the velocity (works only with dynamic and kinematic bodies)
-        .with(Velocity::from(Vec2::unit_x() * 2.0));
+        // Attach a collision shape
+        .insert(CollisionShape::Sphere { radius: 10.0 })
+        
+        // Optionally add other useful copmonents...
+        .insert(Velocity::from_linear(Vec3::X * 2.0))
+        .insert(Acceleration::from_linear(Vec3::X * 1.0))
+        .insert(PhysicMaterial { friction: 1.0, density: 10.0, ..Default::default() })
+        .insert(RotationConstraints::lock());
 }
 ```
 
@@ -42,26 +50,23 @@ fn spawn(commands: &mut Commands) {
 
 **For a 3d game:**
 ```toml
-bevy = "^0.4.0"
-heron = "0.1.1"
+bevy = "^0.5.0"
+heron = "0.5.1"
 ```
 
 **For a 2d game:**
 ```toml
-bevy = "^0.4.0"
-heron = { version = "0.1.1", default-features = false, features = ["2d"] }
+bevy = "^0.5.0"
+heron = { version = "0.5.1", default-features = false, features = ["2d"] }
 ```
 
-**With the git version of bevy:**
-```toml
-bevy = { git = "https://github.com/bevyengine/bevy.git", branch = "main" }
 
-# ATTENTION: The code may not compile. And if it does compile, it may not work properly!
-# Be aware, that it might contains unreleased features and breaking changes too.
-# Checkout the changelog: https://github.com/jcornaz/heron/blob/next-bevy/CHANGELOG.md#unreleased
-heron = { git = "https://github.com/jcornaz/heron.git", branch = "next-bevy" }
-```
+## Bevy Version Supported
 
+| bevy | heron      |
+|------|------------|
+| 0.5  | >= 0.4     |
+| 0.4  | < 0.4      |
 
 ## Design principles
 
@@ -103,6 +108,8 @@ Ideally I would like to have the *power* of [rapier] accessible behind an API fo
 [bevy_rapier]: https://github.com/dimforge/bevy_rapier
 
 
-## Contact
+## Contribute / Contact
 
 You can open issues/discussions here or you can discuss with me (`Jomag#2675`) in the [bevy discord](https://discord.com/invite/gMUk5Ph)
+
+See [how to contribute](https://github.com/jcornaz/heron/blob/main/CONTRIBUTING.md)
