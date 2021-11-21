@@ -10,7 +10,10 @@ The format is inspired from [Keep a Changelog], and this project adheres to [Sem
 
 ## [Unreleased]
 
+### Fixed
 
+* Children `CollisionShape` not rendering in `debug-3d` when `GlobalTransform`
+  missing (#155).
 
 ## [0.12.1] - 2021-10-24
 

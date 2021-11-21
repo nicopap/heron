@@ -146,6 +146,35 @@ fn setup(
             half_segment: 1.0,
         });
 
+    // Child entities (check for #155)
+    commands
+        .spawn()
+        .insert(RigidBody::Dynamic)
+        .insert(Transform::from_xyz(3.0, 25.0, 3.0))
+        .insert(GlobalTransform::identity())
+        .with_children(|children| {
+            let collider = |x: f32, y: f32, z: f32| {
+                (
+                    CollisionShape::Cuboid {
+                        half_extends: Vec3::new(x / 2.0, y / 2.0, z / 2.0),
+                        border_radius: None,
+                    },
+                    Transform::identity(),
+                )
+            };
+            let mut mesh = |x: f32, y: f32, z: f32| PbrBundle {
+                mesh: meshes.add(Mesh::from(shape::Box::new(x, y, z))),
+                material: materials.add(Color::PINK.into()),
+                ..Default::default()
+            };
+            children.spawn_bundle(collider(3.0, 1.0, 1.0));
+            children.spawn_bundle(mesh(3.0, 1.0, 1.0));
+            children.spawn_bundle(collider(1.0, 3.0, 1.0));
+            children.spawn_bundle(mesh(1.0, 3.0, 1.0));
+            children.spawn_bundle(collider(1.0, 1.0, 3.0));
+            children.spawn_bundle(mesh(1.0, 1.0, 3.0));
+        });
+
     // light
     commands.spawn_bundle(LightBundle {
         transform: Transform::from_xyz(-4.0, 9.0, -4.0),

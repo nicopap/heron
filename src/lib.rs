@@ -32,6 +32,7 @@
 //! * `3d` Enable simulation on the 3 axes `x`, `y`, and `z`. Incompatible with the feature `2d`.
 //! * `2d` Enable simulation only on the first 2 axes `x` and `y`. Incompatible with the feature `3d`, therefore require to disable the default features.
 //! * `debug-2d` Render 2d collision shapes. Works only in 2d, support for 3d may be added later.
+//! * `debug-3d` Render 3d collision shapes with wireframes.
 //!
 //! ## Install the plugin
 //!

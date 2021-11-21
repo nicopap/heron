@@ -9,22 +9,42 @@ use crate::shape3d_wireframe::{
 
 use super::DebugColor;
 
+#[allow(clippy::type_complexity)]
 fn add_shape_outlines(
     shapes: Query<
         '_,
         (
             &CollisionShape,
-            &GlobalTransform,
+            &Transform,
+            Option<&GlobalTransform>,
             Option<&RigidBody>,
             Option<&SensorShape>,
+            Option<&Parent>,
         ),
     >,
+    transforms: Query<'_, &GlobalTransform>,
     color: Res<'_, DebugColor>,
     mut lines: ResMut<'_, DebugLines>,
 ) {
-    for (shape, trans, rigid_body_option, sensor_option) in shapes.iter() {
-        let origin = trans.translation;
-        let orient = trans.rotation;
+    for (shape, local_transform, trans, rigid_body_option, sensor_option, parent) in shapes.iter() {
+        let (origin, orient) = if let Some(t) = trans {
+            (t.translation, t.rotation)
+        } else {
+            // May refactor when https://github.com/rust-lang/rust/issues/87335 merges
+            let parent = if let Some(Parent(p)) = parent {
+                p
+            } else {
+                continue;
+            };
+            let parent_global = if let Ok(p) = transforms.get(*parent) {
+                p
+            } else {
+                continue;
+            };
+            let origin = parent_global.translation + local_transform.translation;
+            let orient = parent_global.rotation * local_transform.rotation;
+            (origin, orient)
+        };
         let color = color.for_collider_type(rigid_body_option, sensor_option.is_some());
         match shape {
             CollisionShape::Cuboid {
